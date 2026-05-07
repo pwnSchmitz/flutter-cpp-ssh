@@ -1,17 +1,69 @@
-# flutter_application_1
+# 📱 Flutter CPP SSH Client
 
-A new Flutter project.
+> 🚀 SSH-клиент, написанный на Flutter с использованием C++ для высокопроизводительных сетевых операций.
 
-## Getting Started
+---
 
-This project is a starting point for a Flutter application.
+## 📋 О проекте
 
-A few resources to get you started if this is your first Flutter project:
+**flutter-cpp-ssh** — это кроссплатформенное приложение для удаленного управления серверами через протокол SSH. 
+Благодаря связке **Flutter (Dart)** и **C++**, приложение сочетает в себе красивый интерфейс и высокую производительность сетевых операций.
 
-- [Learn Flutter](https://docs.flutter.dev/get-started/learn-flutter)
-- [Write your first Flutter app](https://docs.flutter.dev/get-started/codelab)
-- [Flutter learning resources](https://docs.flutter.dev/reference/learning-resources)
+### ✨ Особенности
+- 🔐 Поддержка аутентификации по паролю и SSH-ключам
+- ⚡ Высокая скорость работы благодаря нативному C++ бэкенду
+- 🎨 Современный адаптивный дизайн (Material Design 3)
+- 📁 Управление файлами на удаленном сервере
+- 🖥️ Полноценный терминал с подсветкой синтаксиса
+- 💾 Сохранение истории подключений
 
-For help getting started with Flutter development, view the
-[online documentation](https://docs.flutter.dev/), which offers tutorials,
-samples, guidance on mobile development, and a full API reference.
+---
+
+## 🛠 Установка и запуск
+
+### Требования
+- Flutter SDK (версии 3.0 или выше)
+- C++ компилятор (GCC/Clang/MSVC)
+- FFI настроен для твоей платформы
+
+### 1. Клонирование репозитория
+
+    git clone https://github.com/pwnSchmitz/flutter-cpp-ssh.git
+    cd flutter-cpp-ssh
+
+### 2. Установка зависимостей
+
+    flutter pub get
+
+### 3. Запуск приложения
+
+Подключи устройство или эмулятор и выполни:
+
+    flutter run
+
+### 🔧 Сборка C++ части (если требуется)
+
+Если проект использует FFI, убедись, что нативные библиотеки скомпилированы:
+
+    # Пример для Android
+    flutter build apk
+
+    # Пример для Windows
+    flutter build windows
+
+---
+
+## 📁 Структура проекта
+
+    📦 flutter-cpp-ssh
+     ┣ 📂 lib/
+     ┃ ┣ 📂 src/           # Исходный код Dart
+     ┃ ┣ 📂 ffi/           # Обертки для C++ функций
+     ┃ ┗ 📜 main.dart      # Точка входа
+     ┣ 📂 cpp/             # Исходный код C++
+     ┃ ┣ 📜 CMakeLists.txt
+     ┃ ┗ 📜 ssh_client.cpp
+     ┣ 📂 android/         # Android специфичные файлы
+     ┣ 📂 ios/             # iOS специфичные файлы
+     ┣ 📜 pubspec.yaml     # Зависимости Flutter
+     ┗ 📜 README.md        # Этот файл
