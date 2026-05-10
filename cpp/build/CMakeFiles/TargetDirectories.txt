@@ -1,3 +1,0 @@
-G:/fluttercmdpro/flutter_application_1/cpp/build/CMakeFiles/search_engine.dir
-G:/fluttercmdpro/flutter_application_1/cpp/build/CMakeFiles/ALL_BUILD.dir
-G:/fluttercmdpro/flutter_application_1/cpp/build/CMakeFiles/ZERO_CHECK.dir
