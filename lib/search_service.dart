@@ -29,9 +29,16 @@ class SearchService {
     if (_isInitialized) return;
     try {
       _ffi = await SearchEngineFFI.create(callback: _onNativeCallback);
-      _ffi!.init();
-      _isInitialized = true;
-      _log.info('SearchEngineFFI initialized successfully');
+      
+      // 🔥 Проверка: FFI доступен только на Windows
+      if (_ffi != null) {
+        _ffi!.init();
+        _isInitialized = true;
+        _log.info('SearchEngineFFI initialized successfully');
+      } else {
+        // 🔥 На Linux/macOS FFI не доступен — это нормально, не выбрасываем ошибку
+        _log.warning('SearchEngineFFI not available on this platform (Linux/macOS)');
+      }
     } catch (e, st) {
       _log.severe('Failed to initialize SearchEngineFFI', e, st);
       rethrow; // Пробрасываем ошибку, чтобы UI мог показать диалог

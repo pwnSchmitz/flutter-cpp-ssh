@@ -359,12 +359,26 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       if (privateKey != null && privateKey.isNotEmpty) keyPairs = SSHKeyPair.fromPem(privateKey);
       _client = SSHClient(socket, username: widget.connection.username, identities: keyPairs);
       await _client!.authenticated;
-      _shellSession = await _client!.shell(pty: SSHPtyConfig(width: 80, height: 24));
+      
+      // 🔥 Увеличили размер терминала (без параметра terminal)
+      _shellSession = await _client!.shell(pty: SSHPtyConfig(width: 120, height: 40));
+      
+      // 🔥 Подписка на stdout с обработкой ошибок
       _stdoutSubscription = _shellSession!.stdout.listen((chunk) {
-        final cleanText = _stripAnsiCodes(utf8.decode(chunk));
+        final cleanText = _stripAnsiCodes(utf8.decode(chunk, allowMalformed: true));
         if (_isWaitingForOutput) _lastCommandOutput += cleanText;
       }, onError: (error) { if (mounted) setState(() => _addLine("Stream error: $error", isSystem: true)); });
-      await Future.delayed(const Duration(milliseconds: 800));
+      
+      // 🔥 Дополнительно: слушаем stderr если есть
+      if (_shellSession!.stderr != null) {
+        _shellSession!.stderr!.listen((chunk) {
+          if (_isWaitingForOutput) _lastCommandOutput += utf8.decode(chunk, allowMalformed: true);
+        });
+      }
+      
+      // 🔥 Увеличили задержку для инициализации оболочки
+      await Future.delayed(const Duration(milliseconds: 1000));
+      
       setState(() { _isConnected = true; _isConnecting = false; _addSystemMessage("✓ Connection established."); _addPromptLine(); });
     } catch (e) {
       setState(() { _isConnecting = false; _addSystemMessage("✗ Connection failed: $e"); _addPromptLine(); });
@@ -380,10 +394,12 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
 
   String _stripAnsiCodes(String text) {
     String result = text
-        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')
-        .replaceAll(RegExp(r'\x1B\([a-zA-Z0-9]'), '')
-        .replaceAll(RegExp(r'\x1B[@-Z\\-_]'), '')
-        .replaceAll(RegExp(r'[\r\x07]'), '');
+        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')      // CSI-коды (цвета, курсор)
+        .replaceAll(RegExp(r'\x1B\([a-zA-Z0-9]'), '')           // G0/G1 набор символов
+        .replaceAll(RegExp(r'\x1B[@-Z\\-_]'), '')               // Другие управляющие
+        .replaceAll(RegExp(r'[\r\x07]'), '')                    // CR и BEL
+        // 🔥 НОВОЕ: Удаляем OSC-коды (заголовок окна терминала): \x1B]0;текст\x07
+        .replaceAll(RegExp(r'\x1B\][0-9];[^\x07\x1B]*([\x07]|\x1B\\)'), '');
     
     // 🔥 Фильтруем системный мусор (dbus, systemd, journal)
     final lines = result.split('\n');
@@ -441,59 +457,41 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   }
   
   Future<void> _executeRemoteCommand(String command) async {
-    // 🔥 1. Обработка clear / cls
     final trimmedCmd = command.trim();
     if (trimmedCmd == 'clear' || trimmedCmd == 'cls') {
       setState(() => _lines.clear());
       _addPromptLine();
-      return; // Выходим до try/finally, чтобы не добавить лишний промпт
-    }
-
-    if (!_isConnected || _shellSession == null) {
-      _addLine("Error: Not connected.", isOutput: true);
-      _addPromptLine();
       return;
     }
-
+    if (!_isConnected || _shellSession == null) { _addLine("Error: Not connected.", isOutput: true); _addPromptLine(); return; }
     try {
-      _lastCommandOutput = '';
-      _isWaitingForOutput = true;
-
+      _lastCommandOutput = ''; _isWaitingForOutput = true;
       _shellSession!.write(utf8.encode('$command\n'));
-
-      // ️ Задержка для ожидания вывода (временное решение)
-      await Future.delayed(const Duration(milliseconds: 500));
-
+      
+      // 🔥 Увеличили задержку + проверка если вывод пустой
+      await Future.delayed(const Duration(milliseconds: 800));
+      if (_lastCommandOutput.isEmpty) await Future.delayed(const Duration(milliseconds: 400));
+      
       if (_lastCommandOutput.isNotEmpty) {
-        // 🔥 2. Улучшенная фильтрация вывода
         final cleanOutput = _lastCommandOutput.split('\n').where((line) {
           final t = line.trim();
           if (t.isEmpty || t == command) return false;
-          
-          // Пропускаем приглашение терминала
           if (t.contains('@') && (t.contains(r'$') || t.contains('#'))) return false;
           if (t.startsWith('[') || t.startsWith('─') || t.startsWith('┌') || t.startsWith('└')) return false;
-          
-          // 🔥 Фильтруем системный шум Arch/DBus
           if (t.contains('dbus') && t.contains('machineid')) return false;
           if (t.contains('start=') && t.contains('pid=')) return false;
           if (t.startsWith('3008;')) return false;
           if (t.contains('type=command') && t.contains('cwd=')) return false;
           if (t.contains('journal') || t.contains('systemd')) return false;
-          
           return true;
         }).join('\n');
-
-        if (cleanOutput.trim().isNotEmpty) {
-          _addLine(cleanOutput.trim(), isOutput: true);
-        }
+        
+        // 🔥 Показываем вывод даже если фильтрация убрала всё, но данные были
+        final outputToShow = cleanOutput.trim().isNotEmpty ? cleanOutput.trim() : _lastCommandOutput.trim();
+        if (outputToShow.isNotEmpty) _addLine(outputToShow, isOutput: true);
       }
       _isWaitingForOutput = false;
-    } catch (e) {
-      _addLine("Error: $e", isSystem: true);
-    } finally {
-      _addPromptLine();
-    }
+    } catch (e) { _addLine("Error: $e", isSystem: true); } finally { _addPromptLine(); }
   }
 
   @override
