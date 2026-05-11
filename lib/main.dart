@@ -470,6 +470,7 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   SSHClient? _client;
   SSHSession? _shellSession;
   StreamSubscription? _stdoutSubscription;
+  StreamSubscription? _stderrSubscription;
   bool _isConnected = false;
   bool _isConnecting = false;
   String _lastCommandOutput = '';
@@ -523,9 +524,19 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       });
       
       if (_shellSession!.stderr != null) {
-        _shellSession!.stderr!.listen((chunk) {
+        _stderrSubscription = _shellSession!.stderr!.listen((chunk) {
           if (_isWaitingForOutput) {
             _lastCommandOutput += utf8.decode(chunk, allowMalformed: true);
+          } else {
+            // Опционально: показывать ошибки в терминале
+            final errorText = utf8.decode(chunk, allowMalformed: true);
+            if (errorText.trim().isNotEmpty && mounted) {
+              setState(() => _addLine(errorText, isSystem: true));
+            }
+          }
+        }, onError: (error) {
+          if (mounted) {
+            setState(() => _addLine("stderr error: $error", isSystem: true));
           }
         });
       }
@@ -550,6 +561,7 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   @override
   void dispose() {
     _stdoutSubscription?.cancel();
+    _stderrSubscription?.cancel();
     _shellSession?.close();
     _client?.close();
     _scrollController.dispose();
