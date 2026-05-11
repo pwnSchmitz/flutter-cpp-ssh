@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:dartssh2/dartssh2.dart';
@@ -8,19 +9,145 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:provider/provider.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:logging/logging.dart';
-import 'search_service.dart';
-import 'models/search_result.dart';
-import 'screens/search_screen.dart';
+import 'package:path_provider/path_provider.dart';
 
-// 🔐 Глобальный экземпляр для безопасного хранения
-const _storage = FlutterSecureStorage();
+const _secureStorage = FlutterSecureStorage();
+const _connectionsFileName = 'ssh_connections.json';
+
+// ─────────────────────────────────────────────
+// 📦 МОДЕЛИ (на верхнем уровне!)
+// ─────────────────────────────────────────────
+class SSHConnection {
+  final String id, label, host, username;
+  final int port;
+  final String? keyLabel;
+  
+  SSHConnection({
+    required this.id,
+    required this.label,
+    required this.host,
+    this.port = 22,
+    required this.username,
+    this.keyLabel,
+  });
+  
+  static String generateId() => DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString().padLeft(3, '0');
+  
+  Future<void> savePrivateKey(String key) async => await _secureStorage.write(key: 'ssh_key_$keyLabel', value: key);
+  Future<String?> loadPrivateKey() async => keyLabel != null ? await _secureStorage.read(key: 'ssh_key_$keyLabel') : null;
+  Future<void> deletePrivateKey() async {
+    if (keyLabel != null) await _secureStorage.delete(key: 'ssh_key_$keyLabel');
+  }
+  
+  Map<String, dynamic> toJson() => {
+    'id': id,
+    'label': label,
+    'host': host,
+    'port': port,
+    'username': username,
+    'keyLabel': keyLabel,
+  };
+  
+  factory SSHConnection.fromJson(Map<String, dynamic> json) => SSHConnection(
+    id: json['id'],
+    label: json['label'],
+    host: json['host'],
+    port: json['port'] ?? 22,
+    username: json['username'],
+    keyLabel: json['keyLabel'],
+  );
+}
+
+class TerminalLine {
+  String text;
+  bool isPrompt, isSystem, isWelcome, isOutput;
+  
+  TerminalLine({
+    this.text = '',
+    this.isSystem = false,
+    this.isWelcome = false,
+    this.isOutput = false,
+    this.isPrompt = false,
+  });
+}
+
+// ─────────────────────────────────────────────
+// 🔄 PROVIDER (на верхнем уровне!)
+// ─────────────────────────────────────────────
+class ConnectionProvider extends ChangeNotifier {
+  final List<SSHConnection> _connections = [];
+  bool _isLoading = false;
+  
+  List<SSHConnection> get connections => List.unmodifiable(_connections);
+  bool get isLoading => _isLoading;
+  
+  Future<void> loadConnections() async {
+    if (_isLoading) return;
+    _isLoading = true;
+    notifyListeners();
+    
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_connectionsFileName');
+      
+      if (await file.exists()) {
+        final content = await file.readAsString();
+        final List<dynamic> jsonList = jsonDecode(content);
+        _connections.clear();
+        _connections.addAll(jsonList.map((j) => SSHConnection.fromJson(j)));
+      }
+    } catch (e) {
+      Logger.root.severe('Failed to load connections: $e');
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+  
+  Future<void> _saveConnectionsToFile() async {
+    try {
+      final dir = await getApplicationDocumentsDirectory();
+      final file = File('${dir.path}/$_connectionsFileName');
+      final jsonList = _connections.map((c) => c.toJson()).toList();
+      await file.writeAsString(jsonEncode(jsonList));
+    } catch (e) {
+      Logger.root.severe('Failed to save connections: $e');
+    }
+  }
+  
+  Future<void> addConnection(SSHConnection connection) async {
+    _connections.add(connection);
+    await _saveConnectionsToFile();
+    notifyListeners();
+  }
+  
+  Future<void> updateConnection(SSHConnection connection) async {
+    final index = _connections.indexWhere((x) => x.id == connection.id);
+    if (index != -1) {
+      final oldConn = _connections[index];
+      if (oldConn.keyLabel != connection.keyLabel && oldConn.keyLabel != null) {
+        await oldConn.deletePrivateKey();
+      }
+      _connections[index] = connection;
+      await _saveConnectionsToFile();
+      notifyListeners();
+    }
+  }
+  
+  Future<void> removeConnection(String id) async {
+    final conn = _connections.firstWhere((x) => x.id == id, orElse: () => throw Exception('Connection not found'));
+    await conn.deletePrivateKey();
+    _connections.removeWhere((x) => x.id == id);
+    await _saveConnectionsToFile();
+    notifyListeners();
+  }
+}
 
 // ─────────────────────────────────────────────
 // 🚀 ТОЧКА ВХОДА
 // ─────────────────────────────────────────────
 void main() {
-  // 🪵 Настройка логирования
-  Logger.root.level = Level.INFO; // Уровень: ALL, INFO, WARNING, SEVERE
+  Logger.root.level = Level.INFO;
   Logger.root.onRecord.listen((record) {
     debugPrint('[${record.loggerName}] ${record.level.name}: ${record.message}');
     if (record.error != null) debugPrint('Error: ${record.error}');
@@ -37,14 +164,10 @@ class SSHManagerApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
-        ChangeNotifierProvider(create: (_) => ConnectionProvider()),
-        Provider<SearchService>(
-          create: (_) => SearchService()..init(),
-          dispose: (_, service) => service.dispose(),
-        ),
+        ChangeNotifierProvider(create: (_) => ConnectionProvider()..loadConnections()),
       ],
       child: MaterialApp(
-        title: 'SSH & File Search',
+        title: 'SSH Terminal',
         debugShowCheckedModeBanner: false,
         theme: ThemeData.dark().copyWith(
           scaffoldBackgroundColor: const Color(0xFF121212),
@@ -74,40 +197,7 @@ class SSHManagerApp extends StatelessWidget {
           ),
           cardTheme: CardThemeData(color: const Color(0xFF1E1E1E), elevation: 2),
         ),
-        home: const MainNavigationScreen(),
-      ),
-    );
-  }
-}
-
-// ─────────────────────────────────────────────
-// 🧭 ГЛАВНАЯ НАВИГАЦИЯ
-// ─────────────────────────────────────────────
-class MainNavigationScreen extends StatefulWidget {
-  const MainNavigationScreen({super.key});
-
-  @override
-  State<MainNavigationScreen> createState() => _MainNavigationScreenState();
-}
-
-class _MainNavigationScreenState extends State<MainNavigationScreen> {
-  int _currentIndex = 0;
-  final List<Widget> _screens = const [
-    ConnectionListScreen(),
-    SearchScreen(), // ✅ Теперь SearchScreen берёт сервис из Provider
-  ];
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      body: IndexedStack(index: _currentIndex, children: _screens),
-      bottomNavigationBar: NavigationBar(
-        selectedIndex: _currentIndex,
-        onDestinationSelected: (i) => setState(() => _currentIndex = i),
-        destinations: const [
-          NavigationDestination(icon: Icon(Icons.cloud), label: 'SSH'),
-          NavigationDestination(icon: Icon(Icons.search), label: 'Поиск'),
-        ],
+        home: const ConnectionListScreen(),
       ),
     );
   }
@@ -124,7 +214,16 @@ class ConnectionListScreen extends StatelessWidget {
     final connections = context.watch<ConnectionProvider>().connections;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('🔐 SSH Подключения')),
+      appBar: AppBar(
+        title: const Text('🔐 SSH Подключения'),
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            tooltip: 'Обновить',
+            onPressed: () => context.read<ConnectionProvider>().loadConnections(),
+          ),
+        ],
+      ),
       body: connections.isEmpty ? _buildEmptyState(context) : _buildConnectionList(context, connections),
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => _openConnectionDialog(context, null),
@@ -145,7 +244,11 @@ class ConnectionListScreen extends StatelessWidget {
           const SizedBox(height: 8),
           Text('Нажмите + чтобы добавить первый сервер', style: TextStyle(fontSize: 14, color: Colors.grey[600]), textAlign: TextAlign.center),
           const SizedBox(height: 24),
-          ElevatedButton.icon(onPressed: () => _openConnectionDialog(context, null), icon: const Icon(Icons.add), label: const Text('Добавить подключение')),
+          ElevatedButton.icon(
+            onPressed: () => _openConnectionDialog(context, null),
+            icon: const Icon(Icons.add),
+            label: const Text('Добавить подключение'),
+          ),
         ],
       ),
     );
@@ -200,7 +303,10 @@ class ConnectionListScreen extends StatelessWidget {
       actions: [
         TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Отмена')),
         ElevatedButton(
-          onPressed: () { context.read<ConnectionProvider>().removeConnection(conn.id); Navigator.pop(ctx); },
+          onPressed: () async {
+            await context.read<ConnectionProvider>().removeConnection(conn.id);
+            if (ctx.mounted) Navigator.pop(ctx);
+          },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
           child: const Text('Удалить'),
         ),
@@ -261,22 +367,50 @@ class _ConnectionDialogState extends State<ConnectionDialog> {
       title: Text(isEdit ? '✏️ Редактировать' : '➕ Добавить подключение'),
       content: SingleChildScrollView(
         child: Form(key: _formKey, child: Column(mainAxisSize: MainAxisSize.min, children: [
-          TextFormField(controller: _labelController, decoration: const InputDecoration(labelText: 'Название *', prefixIcon: Icon(Icons.label)), validator: (v) => v?.isEmpty ?? true ? 'Введите название' : null),
+          TextFormField(
+            controller: _labelController,
+            decoration: const InputDecoration(labelText: 'Название *', prefixIcon: Icon(Icons.label)),
+            validator: (v) => v?.isEmpty ?? true ? 'Введите название' : null,
+          ),
           const SizedBox(height: 12),
-          TextFormField(controller: _hostController, decoration: const InputDecoration(labelText: 'Хост *', prefixIcon: Icon(Icons.dns), hintText: '192.168.1.1'), validator: (v) => v?.isEmpty ?? true ? 'Введите хост' : null),
+          TextFormField(
+            controller: _hostController,
+            decoration: const InputDecoration(labelText: 'Хост *', prefixIcon: Icon(Icons.dns), hintText: '192.168.1.1'),
+            validator: (v) => v?.isEmpty ?? true ? 'Введите хост' : null,
+          ),
           const SizedBox(height: 12),
           Row(children: [
-            Expanded(child: TextFormField(controller: _portController, decoration: const InputDecoration(labelText: 'Порт', prefixIcon: Icon(Icons.numbers), hintText: '22'), keyboardType: TextInputType.number, validator: (v) { if (v?.isEmpty ?? true) return null; final p = int.tryParse(v!); if (p == null || p < 1 || p > 65535) return '1-65535'; return null; })),
+            Expanded(child: TextFormField(
+              controller: _portController,
+              decoration: const InputDecoration(labelText: 'Порт', prefixIcon: Icon(Icons.numbers), hintText: '22'),
+              keyboardType: TextInputType.number,
+              validator: (v) {
+                if (v?.isEmpty ?? true) return null;
+                final p = int.tryParse(v!);
+                if (p == null || p < 1 || p > 65535) return '1-65535';
+                return null;
+              },
+            )),
             const SizedBox(width: 12),
-            Expanded(child: TextFormField(controller: _usernameController, decoration: const InputDecoration(labelText: 'Пользователь *', prefixIcon: Icon(Icons.person), hintText: 'root'), validator: (v) => v?.isEmpty ?? true ? 'Введите пользователя' : null)),
+            Expanded(child: TextFormField(
+              controller: _usernameController,
+              decoration: const InputDecoration(labelText: 'Пользователь *', prefixIcon: Icon(Icons.person), hintText: 'root'),
+              validator: (v) => v?.isEmpty ?? true ? 'Введите пользователя' : null,
+            )),
           ]),
           const SizedBox(height: 16),
           const Divider(color: Colors.grey),
           const SizedBox(height: 8),
           const Text('🔐 SSH ключ (опционально)', style: TextStyle(fontWeight: FontWeight.bold)),
           const SizedBox(height: 8),
-          if (isEdit && widget.connection?.keyLabel != null) Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Текущий ключ: ${widget.connection!.keyLabel}', style: TextStyle(fontSize: 12, color: Colors.grey[400]))),
-          TextFormField(controller: _keyController, decoration: const InputDecoration(labelText: 'Приватный ключ (OpenSSH)', prefixIcon: Icon(Icons.key), hintText: '-----BEGIN OPENSSH PRIVATE KEY-----\n...'), maxLines: 5, style: GoogleFonts.jetBrainsMono(fontSize: 10)),
+          if (isEdit && widget.connection?.keyLabel != null)
+            Padding(padding: const EdgeInsets.only(bottom: 8), child: Text('Текущий ключ: ${widget.connection!.keyLabel}', style: TextStyle(fontSize: 12, color: Colors.grey[400]))),
+          TextFormField(
+            controller: _keyController,
+            decoration: const InputDecoration(labelText: 'Приватный ключ (OpenSSH)', prefixIcon: Icon(Icons.key), hintText: '-----BEGIN OPENSSH PRIVATE KEY-----\n...'),
+            maxLines: 5,
+            style: GoogleFonts.jetBrainsMono(fontSize: 10),
+          ),
           const SizedBox(height: 4),
           Text('💡 Ключ будет зашифрован и сохранён в безопасном хранилище устройства', style: TextStyle(fontSize: 11, color: Colors.grey[500])),
         ])),
@@ -302,8 +436,11 @@ class _ConnectionDialogState extends State<ConnectionDialog> {
     );
     try {
       if (privateKey.isNotEmpty) await connection.savePrivateKey(privateKey);
-      if (widget.connection != null) provider.updateConnection(connection);
-      else provider.addConnection(connection);
+      if (widget.connection != null) {
+        await provider.updateConnection(connection);
+      } else {
+        await provider.addConnection(connection);
+      }
       if (mounted) Navigator.pop(context);
     } catch (e) {
       if (mounted) ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('Ошибка сохранения: $e'), backgroundColor: Colors.red));
@@ -337,6 +474,7 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   bool _isConnecting = false;
   String _lastCommandOutput = '';
   bool _isWaitingForOutput = false;
+  String _lastSentCommand = '';
 
   @override
   void initState() {
@@ -346,12 +484,19 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       if (mounted) setState(() => _currentSystemColor = HSLColor.fromAHSL(1.0, _colorController.value * 360, 0.8, 0.5).toColor());
     });
     _addWelcomeMessage();
-    WidgetsBinding.instance.addPostFrameCallback((_) { _scrollToBottom(); _focusNode.requestFocus(); _connectToSsh(); });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToBottom();
+      _focusNode.requestFocus();
+      _connectToSsh();
+    });
   }
 
   Future<void> _connectToSsh() async {
     if (_isConnected || _isConnecting) return;
-    setState(() { _isConnecting = true; _addSystemMessage("Connecting to ${widget.connection.host}:${widget.connection.port}..."); });
+    setState(() {
+      _isConnecting = true;
+      _addSystemMessage("Connecting to ${widget.connection.host}:${widget.connection.port}...");
+    });
     try {
       final socket = await SSHSocket.connect(widget.connection.host, widget.connection.port);
       String? privateKey = await widget.connection.loadPrivateKey();
@@ -360,66 +505,151 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       _client = SSHClient(socket, username: widget.connection.username, identities: keyPairs);
       await _client!.authenticated;
       
-      // 🔥 Увеличили размер терминала (без параметра terminal)
-      _shellSession = await _client!.shell(pty: SSHPtyConfig(width: 120, height: 40));
+      _shellSession = await _client!.shell(
+        pty: SSHPtyConfig(width: 120, height: 40),
+      );
       
-      // 🔥 Подписка на stdout с обработкой ошибок
       _stdoutSubscription = _shellSession!.stdout.listen((chunk) {
-        final cleanText = _stripAnsiCodes(utf8.decode(chunk, allowMalformed: true));
-        if (_isWaitingForOutput) _lastCommandOutput += cleanText;
-      }, onError: (error) { if (mounted) setState(() => _addLine("Stream error: $error", isSystem: true)); });
+        if (_isWaitingForOutput) {
+          _lastCommandOutput += utf8.decode(chunk, allowMalformed: true);
+        } else {
+          final text = _cleanTerminalOutput(utf8.decode(chunk, allowMalformed: true));
+          if (text.trim().isNotEmpty && mounted) {
+            setState(() => _addLine(text, isOutput: true));
+          }
+        }
+      }, onError: (error) {
+        if (mounted) setState(() => _addLine("Stream error: $error", isSystem: true));
+      });
       
-      // 🔥 Дополнительно: слушаем stderr если есть
       if (_shellSession!.stderr != null) {
         _shellSession!.stderr!.listen((chunk) {
-          if (_isWaitingForOutput) _lastCommandOutput += utf8.decode(chunk, allowMalformed: true);
+          if (_isWaitingForOutput) {
+            _lastCommandOutput += utf8.decode(chunk, allowMalformed: true);
+          }
         });
       }
       
-      // 🔥 Увеличили задержку для инициализации оболочки
       await Future.delayed(const Duration(milliseconds: 1000));
       
-      setState(() { _isConnected = true; _isConnecting = false; _addSystemMessage("✓ Connection established."); _addPromptLine(); });
+      setState(() {
+        _isConnected = true;
+        _isConnecting = false;
+        _addSystemMessage("✓ Connection established.");
+        _addPromptLine();
+      });
     } catch (e) {
-      setState(() { _isConnecting = false; _addSystemMessage("✗ Connection failed: $e"); _addPromptLine(); });
+      setState(() {
+        _isConnecting = false;
+        _addSystemMessage("✗ Connection failed: $e");
+        _addPromptLine();
+      });
     }
   }
 
   @override
   void dispose() {
-    _stdoutSubscription?.cancel(); _shellSession?.close(); _client?.close();
-    _scrollController.dispose(); _focusNode.dispose(); _colorController.dispose();
+    _stdoutSubscription?.cancel();
+    _shellSession?.close();
+    _client?.close();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    _colorController.dispose();
     super.dispose();
   }
 
+  String _cleanTerminalOutput(String raw) {
+    String text = raw.replaceAll('\r\n', '\n').replaceAll('\r', '\n');
+    
+    List<String> lines = text.split('\n');
+    List<String> processedLines = [];
+    
+    for (var line in lines) {
+      if (_lastSentCommand.isNotEmpty) {
+        if (line.trim() == _lastSentCommand) continue;
+        if (line.trim() == _lastSentCommand + ' ') continue;
+        if (line.contains(_lastSentCommand) && 
+            RegExp(r'[\$#]\s*' + RegExp.escape(_lastSentCommand)).hasMatch(line)) continue;
+      }
+      
+      if (RegExp(r'^[\w\-\.]+@[\w\-\.]+:[^$#]*[#$]\s*$').hasMatch(line.trim())) continue;
+      
+      String processed = _processLineEdits(line);
+      processedLines.add(processed);
+    }
+    
+    String cleaned = processedLines.join('\n');
+    cleaned = _stripAnsiCodes(cleaned);
+    cleaned = _filterArtifactLines(cleaned);
+    
+    return cleaned;
+  }
+
+  String _processLineEdits(String line) {
+    List<String> buffer = [];
+    for (int i = 0; i < line.length; i++) {
+      String char = line[i];
+      if (char == '\b') {
+        if (buffer.isNotEmpty) buffer.removeLast();
+      } else if (char == '\r') {
+        buffer.clear();
+      } else {
+        buffer.add(char);
+      }
+    }
+    return buffer.join();
+  }
+
   String _stripAnsiCodes(String text) {
-    String result = text
-        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')      // CSI-коды (цвета, курсор)
-        .replaceAll(RegExp(r'\x1B\([a-zA-Z0-9]'), '')           // G0/G1 набор символов
-        .replaceAll(RegExp(r'\x1B[@-Z\\-_]'), '')               // Другие управляющие
-        .replaceAll(RegExp(r'[\r\x07]'), '')                    // CR и BEL
-        // 🔥 НОВОЕ: Удаляем OSC-коды (заголовок окна терминала): \x1B]0;текст\x07
-        .replaceAll(RegExp(r'\x1B\][0-9];[^\x07\x1B]*([\x07]|\x1B\\)'), '');
+    return text
+        .replaceAll(RegExp(r'\x1B\[[0-9;?]*[a-zA-Z]'), '')
+        .replaceAll(RegExp(r'\x1B\][0-9]+;[^\x07\x1B]*(\x07|\x1B\\\\)'), '')
+        .replaceAll(RegExp(r'\x1B\][0-9]*;[^\x07]*\x07'), '')
+        .replaceAll(RegExp(r'\x1B\([a-zA-Z0-9]'), '')
+        .replaceAll(RegExp(r'\x1B[@-Z\\\\-_]'), '')
+        .replaceAll('\x1B', '')
+        .replaceAll(RegExp(r'[\x07]'), '');
+  }
+
+  String _filterArtifactLines(String text) {
+    List<String> lines = text.split('\n');
+    List<String> filtered = [];
     
-    // 🔥 Фильтруем системный мусор (dbus, systemd, journal)
-    final lines = result.split('\n');
-    final filtered = lines.where((line) {
-      final trimmed = line.trim();
-      // Пропускаем строки с отладочной информацией
-      if (trimmed.contains('dbus') && trimmed.contains('machineid')) return false;
-      if (trimmed.contains('start=') && trimmed.contains('pid=')) return false;
-      if (trimmed.startsWith('3008;')) return false;
-      if (trimmed.contains('journal') || trimmed.contains('systemd')) return false;
-      if (trimmed.contains('type=command') && trimmed.contains('cwd=')) return false;
-      return true;
-    });
-    
+    for (String line in lines) {
+      String t = line.trim();
+      if (t.isEmpty) continue;
+      
+      if (t.startsWith('┌──') || t.startsWith('└─')) continue;
+      if (t.contains('㉿') || (t.contains('@') && t.contains('[') && t.contains(']'))) continue;
+      if (RegExp(r'^[\w\-\.]+@[\w\-\.]+:[^$#]*[#$]\s*').hasMatch(t)) continue;
+      
+      if (_lastSentCommand.isNotEmpty) {
+        if (t == _lastSentCommand.trim()) continue;
+        if (t.startsWith(_lastSentCommand.trim() + '>')) continue;
+        if (t.startsWith(_lastSentCommand.trim() + ' ')) continue;
+      }
+      
+      if (RegExp(r'^[a-zA-Z]{2,}[>\/]\s*\S').hasMatch(t)) continue;
+      if (RegExp(r'^[a-zA-Z]{2,}[>\/]$').hasMatch(t)) continue;
+      
+      if (RegExp(r'^[0-9]+;.*[@>]').hasMatch(t)) continue;
+      if (t.startsWith(']0;')) continue;
+      if (RegExp(r'^[0-9;]+$').hasMatch(t)) continue;
+      
+      if (t.contains('dbus') && t.contains('machineid')) continue;
+      if (t.contains('start=') && t.contains('pid=')) continue;
+      if (t.startsWith('3008;')) continue;
+      if (t.contains('journal') || t.contains('systemd')) continue;
+      if (t.contains('type=command') && t.contains('cwd=')) continue;
+      
+      filtered.add(line);
+    }
     return filtered.join('\n');
   }
 
   void _addLine(String text, {bool isSystem = false, bool isWelcome = false, bool isOutput = false}) {
     if (!mounted) return;
-    _lines.add(TerminalLine(text: isOutput || isSystem ? _stripAnsiCodes(text) : text, isSystem: isSystem, isWelcome: isWelcome, isOutput: isOutput));
+    _lines.add(TerminalLine(text: text, isSystem: isSystem, isWelcome: isWelcome, isOutput: isOutput));
     _scrollToBottom();
   }
   void _addPromptLine() { if (mounted) { _lines.add(TerminalLine(text: _currentInput, isPrompt: true)); _scrollToBottom(); } }
@@ -427,9 +657,9 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   void _addSystemMessage(String text) => _addLine(text, isSystem: true);
   void _addWelcomeMessage() {
     _addLine("", isWelcome: true);
-    _addLine("⠄⠄⠄⠄⠄                            SSH Terminal", isWelcome: true);
-    _addLine("⠄⠄⣷⣦⠄                            Host: ${widget.connection.host}:${widget.connection.port}", isWelcome: true);
-    _addLine("⠄⠄⠄⠄                            User: ${widget.connection.username}", isWelcome: true);
+    _addLine("⠄                            SSH Terminal", isWelcome: true);
+    _addLine("⣷⠄                            Host: ${widget.connection.host}:${widget.connection.port}", isWelcome: true);
+    _addLine("⠄⠄                            User: ${widget.connection.username}", isWelcome: true);
     _addLine("", isWelcome: true);
   }
   void _scrollToBottom() {
@@ -447,51 +677,95 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       _cursorPosition--; _updatePromptLine();
     }
   }
-  void _handleSubmitted() async {
-    if (_currentInput.trim().isEmpty) { _currentInput = ''; _cursorPosition = 0; _updatePromptLine(); return; }
-    final command = _currentInput;
-    if (_lines.isNotEmpty && _lines.last.isPrompt) setState(() => _lines.removeLast());
-    setState(() => _lines.add(TerminalLine(prompt: "${widget.connection.username}@${widget.connection.host}:~\$ ", command: command, isCommandLine: true)));
-    _currentInput = ''; _cursorPosition = 0;
-    await _executeRemoteCommand(command);
-  }
   
-  Future<void> _executeRemoteCommand(String command) async {
-    final trimmedCmd = command.trim();
-    if (trimmedCmd == 'clear' || trimmedCmd == 'cls') {
-      setState(() => _lines.clear());
-      _addPromptLine();
+  void _handleSubmitted() async {
+    if (_currentInput.trim().isEmpty) { 
+      _currentInput = ''; 
+      _cursorPosition = 0; 
+      _updatePromptLine(); 
+      return; 
+    }
+    
+    final command = _currentInput;
+    _lastSentCommand = command;
+    
+    // Специальная обработка clear
+    if (command.trim() == 'clear' || command.trim() == 'cls') {
+      setState(() {
+        _lines.clear();
+        _currentInput = ''; 
+        _cursorPosition = 0;
+        _addPromptLine();
+      });
       return;
     }
-    if (!_isConnected || _shellSession == null) { _addLine("Error: Not connected.", isOutput: true); _addPromptLine(); return; }
-    try {
-      _lastCommandOutput = ''; _isWaitingForOutput = true;
+    
+    // НЕ добавляем команду сами — сервер пришлет эхо
+    _currentInput = ''; 
+    _cursorPosition = 0;
+    _updatePromptLine();
+    
+    // Отправляем команду на сервер
+    if (_isConnected && _shellSession != null) {
       _shellSession!.write(utf8.encode('$command\n'));
+      await _executeRemoteCommand(command);
+    }
+  }
+
+  Future<void> _executeRemoteCommand(String command) async {
+    if (!_isConnected || _shellSession == null) { 
+      _addLine("Error: Not connected.", isOutput: true); 
+      _addPromptLine(); 
+      return; 
+    }
+    
+    try {
+      _lastCommandOutput = ''; 
+      _isWaitingForOutput = true;
       
-      // 🔥 Увеличили задержку + проверка если вывод пустой
-      await Future.delayed(const Duration(milliseconds: 800));
-      if (_lastCommandOutput.isEmpty) await Future.delayed(const Duration(milliseconds: 400));
+      await Future.delayed(const Duration(milliseconds: 600));
+      int attempts = 0;
+      while (_lastCommandOutput.isEmpty && attempts < 8) {
+        await Future.delayed(const Duration(milliseconds: 150));
+        attempts++;
+      }
       
       if (_lastCommandOutput.isNotEmpty) {
-        final cleanOutput = _lastCommandOutput.split('\n').where((line) {
-          final t = line.trim();
-          if (t.isEmpty || t == command) return false;
-          if (t.contains('@') && (t.contains(r'$') || t.contains('#'))) return false;
-          if (t.startsWith('[') || t.startsWith('─') || t.startsWith('┌') || t.startsWith('└')) return false;
-          if (t.contains('dbus') && t.contains('machineid')) return false;
-          if (t.contains('start=') && t.contains('pid=')) return false;
-          if (t.startsWith('3008;')) return false;
-          if (t.contains('type=command') && t.contains('cwd=')) return false;
-          if (t.contains('journal') || t.contains('systemd')) return false;
-          return true;
-        }).join('\n');
+        var cleanOutput = _cleanTerminalOutput(_lastCommandOutput);
         
-        // 🔥 Показываем вывод даже если фильтрация убрала всё, но данные были
-        final outputToShow = cleanOutput.trim().isNotEmpty ? cleanOutput.trim() : _lastCommandOutput.trim();
-        if (outputToShow.isNotEmpty) _addLine(outputToShow, isOutput: true);
+        final outputLines = cleanOutput.split('\n');
+        final filteredLines = <String>[];
+        
+        for (var line in outputLines) {
+          final trimmed = line.trim();
+          
+          if (trimmed.isEmpty) continue;
+          
+          // Пропускаем пустые prompt'ы
+          if (RegExp(r'^[\w\-\.]+@[\w\-\.]+:[^$#]*[#$]\s*$').hasMatch(trimmed)) continue;
+          
+          // Пропускаем readline артефакты
+          if (RegExp(r'^[a-zA-Z]{2,}[>\/]\s*\S').hasMatch(trimmed)) continue;
+          if (RegExp(r'^[a-zA-Z]{2,}[>\/]$').hasMatch(trimmed)) continue;
+          if (RegExp(r'^[0-9]+;.*[@>]').hasMatch(trimmed)) continue;
+          if (trimmed.startsWith(']0;')) continue;
+          if (RegExp(r'^[0-9;]+$').hasMatch(trimmed)) continue;
+          
+          filteredLines.add(line);
+        }
+        
+        final finalOutput = filteredLines.join('\n').trim();
+        if (finalOutput.isNotEmpty) {
+          setState(() => _addLine(finalOutput, isOutput: true));
+        }
       }
+      
       _isWaitingForOutput = false;
-    } catch (e) { _addLine("Error: $e", isSystem: true); } finally { _addPromptLine(); }
+      setState(() => _addPromptLine());
+    } catch (e) { 
+      _addLine("Error: $e", isSystem: true); 
+      _addPromptLine();
+    }
   }
 
   @override
@@ -500,7 +774,14 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       appBar: AppBar(
         title: Text(widget.connection.label),
         leading: IconButton(icon: const Icon(Icons.arrow_back), onPressed: () { _stdoutSubscription?.cancel(); _shellSession?.close(); _client?.close(); Navigator.pop(context); }),
-        actions: [IconButton(icon: Icon(_isConnected ? Icons.circle : Icons.circle_outlined, color: _isConnected ? Colors.green : Colors.grey), onPressed: null, tooltip: _isConnected ? 'Подключено' : 'Отключено'), const SizedBox(width: 8)],
+        actions: [
+          IconButton(
+            icon: Icon(_isConnected ? Icons.circle : Icons.circle_outlined, color: _isConnected ? Colors.green : Colors.grey),
+            onPressed: null,
+            tooltip: _isConnected ? 'Подключено' : 'Отключено',
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: Focus(
         focusNode: _focusNode,
@@ -512,7 +793,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
             if (event.logicalKey == LogicalKeyboardKey.arrowLeft && _cursorPosition > 0) { setState(() => _cursorPosition--); _updatePromptLine(); return KeyEventResult.handled; }
             if (event.logicalKey == LogicalKeyboardKey.arrowRight && _cursorPosition < _currentInput.length) { setState(() => _cursorPosition++); _updatePromptLine(); return KeyEventResult.handled; }
             
-            // 🔥 ОБНОВЛЁННАЯ ПРОВЕРКА ДЛЯ КИРИЛЛИЦЫ:
             final String? character = event.character;
             if (character != null && character.isNotEmpty) {
               final code = character.codeUnitAt(0);
@@ -524,51 +804,41 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
           }
           return KeyEventResult.ignored;
         },
-        child: GestureDetector(onTap: () => _focusNode.requestFocus(), child: Container(color: Colors.black, child: ListView.builder(controller: _scrollController, padding: const EdgeInsets.all(12.0), itemCount: _lines.length, itemBuilder: (context, index) => _buildTerminalLine(_lines[index], index == _lines.length - 1)))),
+        child: GestureDetector(
+          onTap: () => _focusNode.requestFocus(),
+          child: Container(
+            color: Colors.black,
+            child: ListView.builder(
+              controller: _scrollController,
+              padding: const EdgeInsets.all(12.0),
+              itemCount: _lines.length,
+              itemBuilder: (context, index) => _buildTerminalLine(_lines[index], index == _lines.length - 1),
+            ),
+          ),
+        ),
       ),
     );
   }
 
   Widget _buildTerminalLine(TerminalLine line, bool isLastPrompt) {
-    if (line.isCommandLine) return Padding(padding: const EdgeInsets.only(bottom: 2.0), child: RichText(text: TextSpan(children: [
-      TextSpan(text: line.prompt, style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
-      TextSpan(text: line.command, style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.red, fontWeight: FontWeight.bold)),
-    ])));
+    // Если строка содержит prompt + команду (эхо от сервера)
+    if (line.text.contains('${widget.connection.username}@${widget.connection.host}:~\$')) {
+      final match = RegExp(r'[\$#]\s+(.+)$').firstMatch(line.text);
+      final cmd = match?.group(1) ?? line.text;
+      
+      return Padding(padding: const EdgeInsets.only(bottom: 2.0), child: RichText(text: TextSpan(children: [
+        TextSpan(text: "${widget.connection.username}@${widget.connection.host}:~\$ ", style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
+        TextSpan(text: cmd, style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.red, fontWeight: FontWeight.bold)),
+      ])));
+    }
+    
     if (line.isPrompt) return Padding(padding: const EdgeInsets.only(bottom: 2.0), child: RichText(text: TextSpan(children: [
       TextSpan(text: "${widget.connection.username}@${widget.connection.host}:~\$ ", style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.greenAccent, fontWeight: FontWeight.bold)),
       TextSpan(text: line.text, style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: Colors.red)),
       if (isLastPrompt && _focusNode.hasFocus) WidgetSpan(child: Container(width: 8, height: 18, color: Colors.white.withOpacity(0.8), margin: const EdgeInsets.only(left: 1))),
     ])));
+    
     Color textColor = line.isWelcome ? _currentSystemColor : (line.isSystem ? Colors.redAccent : Colors.white);
     return Padding(padding: const EdgeInsets.only(bottom: 2.0), child: SelectableText(line.text, style: GoogleFonts.jetBrainsMono(fontSize: 14, height: 1.4, color: textColor, fontWeight: line.isWelcome ? FontWeight.w600 : FontWeight.normal, shadows: line.isWelcome ? [Shadow(color: textColor.withOpacity(0.5), blurRadius: 4)] : null)));
   }
-}
-
-// ─────────────────────────────────────────────
-// 📦 МОДЕЛИ
-// ─────────────────────────────────────────────
-class SSHConnection {
-  final String id, label, host, username;
-  final int port;
-  final String? keyLabel;
-  SSHConnection({required this.id, required this.label, required this.host, this.port = 22, required this.username, this.keyLabel});
-  static String generateId() => DateTime.now().millisecondsSinceEpoch.toString() + Random().nextInt(1000).toString().padLeft(3, '0');
-  Future<void> savePrivateKey(String k) async => await _storage.write(key: 'ssh_key_$keyLabel', value: k);
-  Future<String?> loadPrivateKey() async => keyLabel != null ? await _storage.read(key: 'ssh_key_$keyLabel') : null;
-  Future<void> deletePrivateKey() async { if (keyLabel != null) await _storage.delete(key: 'ssh_key_$keyLabel'); }
-  Map<String, dynamic> toJson() => {'id': id, 'label': label, 'host': host, 'port': port, 'username': username, 'keyLabel': keyLabel};
-  factory SSHConnection.fromJson(Map<String, dynamic> j) => SSHConnection(id: j['id'], label: j['label'], host: j['host'], port: j['port'] ?? 22, username: j['username'], keyLabel: j['keyLabel']);
-}
-
-class ConnectionProvider extends ChangeNotifier {
-  final List<SSHConnection> _connections = [];
-  void addConnection(SSHConnection c) { _connections.add(c); notifyListeners(); }
-  void updateConnection(SSHConnection c) { final i = _connections.indexWhere((x) => x.id == c.id); if (i != -1) { _connections[i] = c; notifyListeners(); } }
-  void removeConnection(String id) async { final c = _connections.firstWhere((x) => x.id == id); await c.deletePrivateKey(); _connections.removeWhere((x) => x.id == id); notifyListeners(); }
-  List<SSHConnection> get connections => List.unmodifiable(_connections);
-}
-
-class TerminalLine {
-  String text; bool isPrompt, isSystem, isWelcome, isOutput, isCommandLine; String? prompt, command;
-  TerminalLine({this.text = '', this.isSystem = false, this.isWelcome = false, this.isOutput = false, this.isPrompt = false, this.isCommandLine = false, this.prompt, this.command});
 }
