@@ -10,29 +10,15 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-
-  # SSH
-  dartssh2: ^2.17.1
-
-  # FFI для нативного поиска
+  dartssh2: ^2.8.0
   ffi: ^2.1.0
-
-  # Работа с файлами и путями
   file_picker: ^8.0.0+1
   path: ^1.9.0
   path_provider: ^2.1.2
-
-  # 🔐 Безопасное хранение секретов (ключи, пароли)
   flutter_secure_storage: ^10.1.0
-
-  # 🪵 Структурированное логирование
   logging: ^1.2.0
-
-  # 🎨 UI-утилиты (для будущего рефакторинга)
-  provider: ^6.1.1          # Простой стейт-менеджмент для списка подключений
-  google_fonts: ^6.1.0      # Красивые моноширинные шрифты для терминала
-
-  # 🧩 Опционально: для удобных моделей (можно убрать если не нужно)
+  provider: ^6.1.1
+  google_fonts: ^6.1.0
   freezed_annotation: ^2.4.1
   json_annotation: ^4.8.1
 
@@ -42,13 +28,8 @@ dev_dependencies:
   integration_test:
     sdk: flutter
 
-  # Линтеры
   flutter_lints: ^5.0.0
-
-  # 🔗 Автогенерация FFI-биндингов (для search_engine.h)
   ffigen: ^11.0.0
-
-  # 🏗️ Code generation (если используешь freezed/json_serializable)
   build_runner: ^2.4.8
   freezed: ^2.4.5
   json_serializable: ^6.7.1
@@ -56,15 +37,6 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # 🔤 Шрифты для терминала (опционально, можно подключить позже)
-  # fonts:
-  #   - family: JetBrainsMono
-  #     fonts:
-  #       - asset: assets/fonts/JetBrainsMono-Regular.ttf
-  #       - asset: assets/fonts/JetBrainsMono-Bold.ttf
-  #         weight: 700
-
-# ⚙️ Настройка ffigen для автогенерации биндингов (запуск: dart run ffigen --config ffigen.yaml)
 ffigen:
   name: SearchEngineBindings
   description: 'FFI bindings for search_engine.dll'
