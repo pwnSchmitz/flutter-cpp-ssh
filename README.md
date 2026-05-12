@@ -18,7 +18,7 @@
 > *(Replace with actual screenshots or GIFs of your app)*
 > | Connection & Terminal | Quick Commands FAB | Nano Editor |
 > |-----------------------|--------------------|-------------|
-> | `![terminal](screenshots/terminal.png)` | `![fab](screenshots/fast_commands.png)` | `![nano](screenshots/nano_command.png)` |
+> | '![terminal](screenshots/terminal.png)' | '![fab](screenshots/fast_commands.png)' | '![nano](screenshots/nano_command.png)' |
 
 ---
 
@@ -36,7 +36,7 @@
 
 1. **Clone the repository**
    ```bash
-   git clone https://github.com/yourusername/flutter-cpp-ssh.git
+   git clone https://github.com/pwnSchmitz/flutter-cpp-ssh
    cd flutter-cpp-ssh
 
 ---
