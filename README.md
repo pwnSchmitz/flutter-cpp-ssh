@@ -25,7 +25,7 @@
 
 - **Framework:** Flutter 3.x
 - **Language:** Dart
-- **SSH Core:** `dartssh2` / `ssh_client` *(update to your actual package)*
+- **SSH Core:** `dartssh2` / `ssh_client` 
 - **UI/UX:** Material 3, Custom Widgets, `TickerProviderStateMixin` animations
 - **Architecture:** Feature-first structure, reactive state updates, separation of concerns (models/services/widgets)
 
