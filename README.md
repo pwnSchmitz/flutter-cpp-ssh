@@ -4,12 +4,12 @@
 
 - 🔒 **Secure SSH Connections** – Password & key-based authentication
 - 📱 **True Cross-Platform** – Runs on Android, iOS, Web, Windows, macOS & Linux
--  **Terminal-Grade UI** – Dark theme, monospace fonts, smooth auto-scrolling & system color accents
+- 💻 **Terminal-Grade UI** – Dark theme, monospace fonts, smooth auto-scrolling & system color accents
 - ⚡ **Real-Time Output** – Live streaming, smart echo filtering & prompt parsing
 - 📝 **Built-in Nano Editor** – Edit remote files directly from the terminal interface
 - 🚀 **Quick Command FAB** – One-tap access to frequently used system commands (`ls`, `top`, `df`, etc.)
 - 🧹 **Output Cleaner** – Automatically strips ANSI codes, readline artifacts & duplicate prompts
--  **Reactive State** – Lightweight, efficient, and fully mounted-safe UI updates
+- 🔄 **Reactive State** – Lightweight, efficient, and fully mounted-safe UI updates
 
 ---
 
