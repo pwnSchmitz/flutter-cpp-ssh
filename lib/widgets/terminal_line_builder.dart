@@ -11,7 +11,6 @@ class TerminalLineBuilder {
     FocusNode focusNode,
     Color systemColor,
   ) {
-    // Если строка содержит prompt + команду (эхо от сервера)
     if (line.text.contains('${connection.username}@${connection.host}:~\$')) {
       final match = RegExp(r'[\$#]\s+(.+)\$').firstMatch(line.text);
       final cmd = match?.group(1) ?? line.text;
@@ -45,7 +44,6 @@ class TerminalLineBuilder {
       );
     }
     
-    // ✅ FIX: Правильный синтаксис if в коллекции
     if (line.isPrompt) {
       return Padding(
         padding: const EdgeInsets.only(bottom: 2.0), 
@@ -69,7 +67,6 @@ class TerminalLineBuilder {
                   color: Colors.red,
                 ),
               ),
-              // ✅ FIX: withValues вместо withOpacity + правильный синтаксис
               if (isLastPrompt && focusNode.hasFocus)
                 WidgetSpan(
                   child: Container(
@@ -93,7 +90,6 @@ class TerminalLineBuilder {
       padding: const EdgeInsets.only(bottom: 2.0), 
       child: SelectableText(
         line.text, 
-        // ✅ FIX: withValues вместо withOpacity
         style: GoogleFonts.jetBrainsMono(
           fontSize: 14, 
           height: 1.4, 

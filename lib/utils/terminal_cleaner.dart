@@ -8,9 +8,9 @@ class TerminalCleaner {
     for (var line in lines) {
       if (lastSentCommand.isNotEmpty) {
         if (line.trim() == lastSentCommand) continue;
-        if (line.trim() == '$lastSentCommand ') continue; // ✅ Интерполяция вместо конкатенации
+        if (line.trim() == '$lastSentCommand ') continue;
         if (line.contains(lastSentCommand) && 
-            RegExp(r'[\$#]\s*' + RegExp.escape(lastSentCommand)).hasMatch(line)) { // ✅ Добавлены фигурные скобки
+            RegExp(r'[\$#]\s*' + RegExp.escape(lastSentCommand)).hasMatch(line)) {
           continue;
         }
       }

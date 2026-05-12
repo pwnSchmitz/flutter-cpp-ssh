@@ -4,14 +4,14 @@ import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:logging/logging.dart';
 import '../models/ssh_connection.dart';
-import '../utils/constants.dart'; // ✅ Теперь импортируем
+import '../utils/constants.dart';
 
 const _secureStorage = FlutterSecureStorage();
 
 class StorageService {
   static Future<File> getConnectionsFile() async {
     final dir = await getApplicationDocumentsDirectory();
-    return File('${dir.path}/$connectionsFileName'); // ✅ Используем публичную константу
+    return File('${dir.path}/$connectionsFileName');
   }
 
   static Future<List<SSHConnection>> loadConnections() async {

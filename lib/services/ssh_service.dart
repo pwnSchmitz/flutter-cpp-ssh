@@ -15,7 +15,6 @@ class SSHService {
   String _lastCommandOutput = '';
   bool _isWaitingForOutput = false;
 
-  // ✅ SFTP клиент
   SftpClient? _sftpClient;
 
   bool get isConnected => _isConnected;
@@ -44,8 +43,6 @@ class SSHService {
       );
 
       await _client!.authenticated;
-      
-      // ✅ Инициализируем SFTP клиент
       _sftpClient = await _client!.sftp();
       
       _shellSession = await _client!.shell(
@@ -125,17 +122,14 @@ class SSHService {
     _shellSession?.write(utf8.encode(text));
   }
 
-  // ✅ SFTP: Чтение файла
   Future<String> readFile(String remotePath) async {
     if (_sftpClient == null) {
       throw Exception('SFTP not initialized');
     }
 
     try {
-      // Открываем файл для чтения
       final file = await _sftpClient!.open(remotePath, mode: SftpFileOpenMode.read);
       
-      // Читаем всё содержимое через readBytes()
       Uint8List content = await file.readBytes();
       
       await file.close();
@@ -146,20 +140,17 @@ class SSHService {
     }
   }
 
-  // ✅ SFTP: Запись файла (исправлено - используем Stream)
   Future<void> writeFile(String remotePath, String content) async {
     if (_sftpClient == null) {
       throw Exception('SFTP not initialized');
     }
 
     try {
-      // Открываем файл для записи (создаём если не существует, обрезаем если есть)
       final file = await _sftpClient!.open(
         remotePath, 
         mode: SftpFileOpenMode.write | SftpFileOpenMode.create | SftpFileOpenMode.truncate,
       );
       
-      // ✅ Создаём поток из данных и записываем
       final data = Uint8List.fromList(utf8.encode(content));
       await file.write(Stream.value(data));
       
@@ -177,12 +168,9 @@ class SSHService {
     }
 
     try {
-      // stat() может вернуть объект или выбросить ошибку
-      // Если ошибки нет - файл существует
       await _sftpClient!.stat(remotePath);
       return true;
     } catch (e) {
-      // Если ошибка (файл не найден) - возвращаем false
       return false;
     }
   }
@@ -192,7 +180,6 @@ class SSHService {
     await _stderrSubscription?.cancel();
     _shellSession?.close();
     
-    // ✅ Закрываем SFTP (без await, так как close() возвращает void)
     _sftpClient?.close();
     _sftpClient = null;
     

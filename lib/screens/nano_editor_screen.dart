@@ -34,17 +34,14 @@ class _NanoEditorScreenState extends State<NanoEditorScreen> {
         _error = null;
       });
 
-      // Проверяем существование файла через SFTP
       bool exists = await widget.sshService.fileExists(widget.filePath);
       
       if (!exists) {
-        // Файл не существует — пустой редактор
         _controller.text = '';
         setState(() => _isLoading = false);
         return;
       }
 
-      // ✅ Читаем файл через SFTP
       String content = await widget.sshService.readFile(widget.filePath);
       _controller.text = content;
 
@@ -61,7 +58,6 @@ class _NanoEditorScreenState extends State<NanoEditorScreen> {
 
       String content = _controller.text;
       
-      // ✅ Сохраняем файл через SFTP
       await widget.sshService.writeFile(widget.filePath, content);
 
       if (mounted) {
