@@ -1,57 +1,75 @@
-# 📱 flutter-cpp-ssh
+# 🖥️ Flutter SSH Terminal (FSC)
 
-> 🚀 SSH-клиент, написанный на Flutter с использованием зависимостей dartssh2 и др.
+## ✨ Features
 
----
-
-## 📋 О проекте
-
-**flutter-cpp-ssh** — это приложение для удаленного управления серверами через протокол SSH. 
-Благодаря **Flutter (Dart)** , приложение сочетает в себе красивый интерфейс и высокую производительность сетевых операций.
-
-### ✨ Особенности
-- 🔐 Поддержка аутентификации по SSH-ключам
-- ⚡ Высокая скорость работы.
-- 🎨 Современный адаптивный дизайн (Material Design 3)
-- 📁 Управление файлами на удаленном сервере
-- 🖥️ Полноценный терминал c возможностью выполнения любых удаленных команд
+- 🔒 **Secure SSH Connections** – Password & key-based authentication
+- 📱 **True Cross-Platform** – Runs on Android, iOS, Web, Windows, macOS & Linux
+-  **Terminal-Grade UI** – Dark theme, monospace fonts, smooth auto-scrolling & system color accents
+- ⚡ **Real-Time Output** – Live streaming, smart echo filtering & prompt parsing
+- 📝 **Built-in Nano Editor** – Edit remote files directly from the terminal interface
+- 🚀 **Quick Command FAB** – One-tap access to frequently used system commands (`ls`, `top`, `df`, etc.)
+- 🧹 **Output Cleaner** – Automatically strips ANSI codes, readline artifacts & duplicate prompts
+-  **Reactive State** – Lightweight, efficient, and fully mounted-safe UI updates
 
 ---
 
-## 🛠 Установка и запуск
+##  Screenshots
 
-### Требования
-- Flutter SDK (версии 3.0 или выше)
-- FFI настроен для твоей платформы
+> *(Replace with actual screenshots or GIFs of your app)*
+> | Connection & Terminal | Quick Commands FAB | Nano Editor |
+> |-----------------------|--------------------|-------------|
+> | `![terminal](screenshots/terminal.png)` | `![fab](screenshots/fast_commands.png)` | `![nano](screenshots/nano_command.png)` |
 
-### 1. Клонирование репозитория
-
-    git clone https://github.com/pwnSchmitz/flutter-cpp-ssh.git
-    cd flutter-cpp-ssh
-
-### 2. Установка зависимостей
-
-    flutter pub get
-
-### 3. Запуск приложения
-
-Подключи устройство или эмулятор и выполни:
-
-    flutter run
-    
 ---
 
-## 📁 Структура проекта
+## 🛠️ Tech Stack
 
-    📦 flutter-cpp-ssh
-     ┣ 📂 lib/
-     ┃ ┣ 📂 src/           # Исходный код Dart
-     ┃ ┣ 📂 ffi/           # Обертки для C++ функций
-     ┃ ┗ 📜 main.dart      # Точка входа
-     ┣ 📂 cpp/             # Исходный код C++
-     ┃ ┣ 📜 CMakeLists.txt
-     ┃ ┗ 📜 ssh_client.cpp
-     ┣ 📂 android/         # Android специфичные файлы
-     ┣ 📂 ios/             # iOS специфичные файлы
-     ┣ 📜 pubspec.yaml     # Зависимости Flutter
-     ┗ 📜 README.md        # Этот файл
+- **Framework:** Flutter 3.x
+- **Language:** Dart
+- **SSH Core:** `dartssh2` / `ssh_client` *(update to your actual package)*
+- **UI/UX:** Material 3, Custom Widgets, `TickerProviderStateMixin` animations
+- **Architecture:** Feature-first structure, reactive state updates, separation of concerns (models/services/widgets)
+
+---
+
+##  Quick Start
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourusername/flutter-cpp-ssh.git
+   cd flutter-cpp-ssh
+
+---
+
+## 📁 Project Structure
+
+📁 lib/
+├── 📱 app/                           # Main application widget
+│   └── ssh_manager_app.dart          # Root widget with theme & routing
+│
+├──  models/                        # Data models
+│   ├── ssh_connection.dart           # SSH connection model
+│   └── terminal_line.dart            # Terminal line model
+│
+├── 🔄 providers/                     # State management providers
+│   └── connection_provider.dart      # Connections state provider
+│
+├── 🖼️ screens/                       # App screens
+│   ├── 💬 dialogs/                   # Dialog components
+│   │   └── connection_dialog.dart    # Add/edit connection dialog
+│   ├── connection_list_screen.dart   # Saved connections list
+│   ├── nano_editor_screen.dart       # Nano text editor screen
+│   └── terminal_screen.dart          # Main terminal screen
+│
+├── ⚙️ services/                      # Business logic services
+│   ├── ssh_service.dart              # SSH service (connect, execute)
+│   └── storage_service.dart          # Local storage (SharedPreferences)
+│
+├── 🛠️ utils/                         # Utilities & helpers
+│   ├── constants.dart                # App constants
+│   └── terminal_cleaner.dart         # ANSI codes & output cleaner
+│
+├── 🧩 widgets/                       # Reusable widgets
+│   └── terminal_line_builder.dart    # Terminal line renderer
+│
+└── 📄 main.dart                      # App entry point
