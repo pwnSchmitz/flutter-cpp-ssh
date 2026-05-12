@@ -15,7 +15,6 @@
 
 ##  Screenshots
 
-> *(Replace with actual screenshots or GIFs of your app)*
 > | Connection & Terminal | Quick Commands FAB |
 > |-----------------------|--------------------|
 > | '![terminal](screenshots/terminal.png)' | '![fab](screenshots/fast_commands.png)' |
