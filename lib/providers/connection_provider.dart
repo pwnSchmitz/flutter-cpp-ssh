@@ -4,7 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:logging/logging.dart';
 import 'package:path_provider/path_provider.dart';
 import '../models/ssh_connection.dart';
-import '../utils/constants.dart'; // ✅ Импортируем константы
+import '../utils/constants.dart';
 
 class ConnectionProvider extends ChangeNotifier {
   final List<SSHConnection> _connections = [];
@@ -20,7 +20,6 @@ class ConnectionProvider extends ChangeNotifier {
     
     try {
       final dir = await getApplicationDocumentsDirectory();
-      // ✅ Используем публичную константу из constants.dart
       final file = File('${dir.path}/$connectionsFileName');
       
       if (await file.exists()) {
@@ -40,7 +39,6 @@ class ConnectionProvider extends ChangeNotifier {
   Future<void> _saveConnectionsToFile() async {
     try {
       final dir = await getApplicationDocumentsDirectory();
-      // ✅ Используем публичную константу
       final file = File('${dir.path}/$connectionsFileName');
       final jsonList = _connections.map((c) => c.toJson()).toList();
       await file.writeAsString(jsonEncode(jsonList));
