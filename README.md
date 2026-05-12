@@ -43,33 +43,33 @@
 
 ## 📁 Project Structure
 
-📁 lib/
-├── 📱 app/                           # Main application widget
-│   └── ssh_manager_app.dart          # Root widget with theme & routing
-│
-├──  models/                        # Data models
-│   ├── ssh_connection.dart           # SSH connection model
-│   └── terminal_line.dart            # Terminal line model
-│
-├── 🔄 providers/                     # State management providers
-│   └── connection_provider.dart      # Connections state provider
-│
-├── 🖼️ screens/                       # App screens
-│   ├── 💬 dialogs/                   # Dialog components
-│   │   └── connection_dialog.dart    # Add/edit connection dialog
-│   ├── connection_list_screen.dart   # Saved connections list
-│   ├── nano_editor_screen.dart       # Nano text editor screen
-│   └── terminal_screen.dart          # Main terminal screen
-│
-├── ⚙️ services/                      # Business logic services
-│   ├── ssh_service.dart              # SSH service (connect, execute)
-│   └── storage_service.dart          # Local storage (SharedPreferences)
-│
-├── 🛠️ utils/                         # Utilities & helpers
-│   ├── constants.dart                # App constants
-│   └── terminal_cleaner.dart         # ANSI codes & output cleaner
-│
-├── 🧩 widgets/                       # Reusable widgets
-│   └── terminal_line_builder.dart    # Terminal line renderer
-│
-└── 📄 main.dart                      # App entry point
+      📁 lib/
+        ├── 📱 app/                           # Main application widget
+        │   └── ssh_manager_app.dart          # Root widget with theme & routing
+        │
+        ├── 📦 models/                        # Data models
+        │   ├── ssh_connection.dart           # SSH connection model
+        │   └── terminal_line.dart            # Terminal line model
+        │
+        ├── 🔄 providers/                     # State management providers
+        │   └── connection_provider.dart      # Connections state provider
+        │
+        ├── ️ screens/                       # App screens
+        │   ├── 💬 dialogs/                   # Dialog components
+        │   │   └── connection_dialog.dart    # Add/edit connection dialog
+        │   ├── connection_list_screen.dart   # Saved connections list
+        │   ├── nano_editor_screen.dart       # Nano text editor screen
+        │   └── terminal_screen.dart          # Main terminal screen
+        │
+        ├── ️ services/                      # Business logic services
+        │   ├── ssh_service.dart              # SSH service (connect, execute)
+        │   └── storage_service.dart          # Local storage (SharedPreferences)
+        │
+        ├── 🛠️ utils/                         # Utilities & helpers
+        │   ├── constants.dart                # App constants
+        │   └── terminal_cleaner.dart         # ANSI codes & output cleaner
+        │
+        ├── 🧩 widgets/                       # Reusable widgets
+        │   └── terminal_line_builder.dart    # Terminal line renderer
+        │
+        └── 📄 main.dart                      # App entry point
