@@ -29,7 +29,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
   bool _isConnecting = false;
   String _lastSentCommand = '';
 
-  // ✅ Список быстрых команд (системные)
   static const List<String> _quickCommands = [
     'ls -la',
     'cd ~',
@@ -191,22 +190,18 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
     }
   }
 
-  // ✅ Метод вставки команды в оба поля ввода
   void _insertCommandToInput(String command) {
-    // Вставляем в мобильный TextField
     _mobileInputController.text = command;
     _mobileInputController.selection = TextSelection.fromPosition(
       TextPosition(offset: command.length),
     );
 
-    // Синхронизируем с внутренним буфером терминала
     setState(() {
       _currentInput = command;
       _cursorPosition = command.length;
       _updatePromptLine();
     });
 
-    // Снимаем фокус с мобильного поля и возвращаем на терминал
     FocusScope.of(context).unfocus();
     _focusNode.requestFocus();
   }
@@ -222,7 +217,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
     final command = _currentInput;
     _lastSentCommand = command;
 
-    // Обработка clear/cls
     if (command.trim() == 'clear' || command.trim() == 'cls') {
       setState(() {
         _lines.clear();
@@ -233,7 +227,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       return;
     }
 
-    // ✅ ОБРАБОТКА nano
     if (command.startsWith('nano ')) {
       final filePath = command.substring(5).trim();
       if (filePath.isEmpty) {
@@ -244,7 +237,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
         return;
       }
 
-      // Открываем редактор
       Navigator.push(
         context,
         MaterialPageRoute(
@@ -254,7 +246,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
           ),
         ),
       ).then((_) {
-        // После закрытия редактора — добавляем prompt
         setState(() => _addPromptLine());
       });
 
@@ -263,8 +254,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       _updatePromptLine();
       return;
     }
-
-    // Остальные команды отправляются на сервер
     _currentInput = '';
     _cursorPosition = 0;
     _updatePromptLine();
@@ -274,17 +263,13 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
     }
   }
 
-  // ✅ НОВАЯ ФУНКЦИЯ: отправка из мобильного бара
   void _sendFromMobileBar() {
     final command = _mobileInputController.text.trim();
     if (command.isEmpty) return;
 
-    // Устанавливаем команду во внутренний буфер и отправляем
     _currentInput = command;
     _cursorPosition = command.length;
     _handleSubmitted();
-
-    // Очищаем мобильный ввод
     _mobileInputController.clear();
   }
 
@@ -308,21 +293,16 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
         for (var line in outputLines) {
           final trimmed = line.trim();
 
-          // Пропускаем пустые строки
           if (trimmed.isEmpty) continue;
 
-          // Пропускаем prompt'ы
-          if (RegExp(r'^[\w\-\.]+@[\w\-\.]+:[^$#]*[#$]\s*$')
-              .hasMatch(trimmed)) continue;
+          if (RegExp(r'^[\w\-\.]+@[\w\-\.]+:[^$#]*[#$]\s*$').hasMatch(trimmed)) continue;
 
-          // Пропускаем readline артефакты
           if (RegExp(r'^[a-zA-Z]{2,}[>\/]\s*\S').hasMatch(trimmed)) continue;
           if (RegExp(r'^[a-zA-Z]{2,}[>\/]$').hasMatch(trimmed)) continue;
           if (RegExp(r'^[0-9]+;.*[@>]').hasMatch(trimmed)) continue;
           if (trimmed.startsWith(']0;')) continue;
           if (RegExp(r'^[0-9;]+$').hasMatch(trimmed)) continue;
 
-          // ✅ ГЛАВНОЕ: Ещё раз проверяем, не является ли это эхом команды
           if (trimmed == command.trim()) continue;
           if (trimmed == '${command.trim()} ') continue;
 
@@ -368,7 +348,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
       ),
       body: Column(
         children: [
-          // ✅ Терминал с промптами
           Expanded(
             child: Focus(
               focusNode: _focusNode,
@@ -435,7 +414,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
             ),
           ),
 
-          // ✅ НОВЫЙ: Мобильный бар ввода с быстрыми командами
           Container(
             decoration: BoxDecoration(
               color: Colors.grey[900],
@@ -450,7 +428,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               children: [
-                // 🔘 FAB с быстрыми командами (слева, гармонично с полем)
                 Container(
                   margin: const EdgeInsets.only(right: 8),
                   decoration: BoxDecoration(
@@ -496,7 +473,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
                   ),
                 ),
 
-                // 📝 Поле ввода
                 Expanded(
                   child: Container(
                     decoration: BoxDecoration(
@@ -529,8 +505,6 @@ class _TerminalScreenState extends State<TerminalScreen> with TickerProviderStat
                 ),
 
                 const SizedBox(width: 8),
-
-                // 🚀 Кнопка отправки
                 Container(
                   decoration: BoxDecoration(
                     color: Colors.blue,
